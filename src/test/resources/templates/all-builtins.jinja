@@ -1,0 +1,145 @@
+{#-
+  all-builtins.jinja — Exhaustive showcase of every built-in filter and test.
+
+  Every built-in in io.gravitee.jinja4j.filter.builtin and
+  io.gravitee.jinja4j.test.builtin is invoked at least once here, producing
+  one deterministic line per feature. The line format is:
+      <section>: <name> -> <result>
+-#}
+=== FILTERS ===
+
+-- scalar/numeric --
+abs: {{ -7 | abs }}|{{ -3.5 | abs }}
+round default: {{ 3.7 | round }}
+round precision: {{ 3.14159 | round(2) }}
+round ceil: {{ 3.1 | round(0, method='ceil') }}
+round floor: {{ 3.9 | round(0, method='floor') }}
+int from string: {{ '42' | int }}
+int default: {{ 'abc' | int(99) }}
+float from int: {{ 42 | float }}
+float default: {{ 'abc' | float(9.5) }}
+string: {{ 42 | string }}
+filesizeformat decimal: {{ 1500 | filesizeformat }}
+filesizeformat binary: {{ 1048576 | filesizeformat(true) }}
+sum ints: {{ [1, 2, 3] | sum }}
+sum attribute: {{ [{'n': 10}, {'n': 20}] | sum(attribute='n') }}
+max: {{ [3, 1, 5, 2] | max }}
+min: {{ [3, 1, 5, 2] | min }}
+
+-- string --
+upper: {{ 'hello' | upper }}
+lower: {{ 'HELLO' | lower }}
+capitalize: {{ 'hello WORLD' | capitalize }}
+title: {{ 'hello world foo' | title }}
+trim: {{ '  hello  ' | trim }}
+replace all: {{ 'aabaa' | replace('a', 'x') }}
+replace limit: {{ 'aabaa' | replace('a', 'x', 2) }}
+reverse string: {{ 'hello' | reverse }}
+truncate: {{ 'Hello World, this is long' | truncate(10) }}
+truncate custom end: {{ 'Hello World, this is long' | truncate(10, '>>') }}
+indent default: {{ 'a\nb\nc' | indent }}
+indent width: {{ 'a\nb\nc' | indent(2) }}
+indent first: {{ 'a\nb' | indent(2, true) }}
+striptags: {{ '<p>Hello <b>World</b></p>' | striptags }}
+wordcount: {{ 'hello world foo' | wordcount }}
+center: [{{ 'hi' | center(10) }}]
+urlencode: {{ 'a b&c=d' | urlencode }}
+
+-- escape --
+escape: {{ '<b>"x"</b>' | escape }}
+escape alias e: {{ '<br>' | e }}
+forceescape: {{ '<div>' | forceescape }}
+safe renders raw: {{ '<safe/>' | safe }}
+xmlattr: <div {{ {'class': 'x', 'id': 'y'} | xmlattr }}>
+
+-- collection --
+length list: {{ [1, 2, 3] | length }}
+length string: {{ 'hello' | length }}
+length map: {{ {'a': 1, 'b': 2} | length }}
+count alias: {{ [1, 2, 3, 4] | count }}
+first list: {{ [10, 20, 30] | first }}
+first string: {{ 'abc' | first }}
+last list: {{ [10, 20, 30] | last }}
+last string: {{ 'abc' | last }}
+list from string: {{ 'abc' | list | join('-') }}
+sort ascending: {{ [3, 1, 2] | sort | join(',') }}
+sort reverse: {{ [1, 2, 3] | sort(reverse=true) | join(',') }}
+sort attribute: {{ [{'n': 3}, {'n': 1}, {'n': 2}] | sort(attribute='n') | map(attribute='n') | join(',') }}
+unique: {{ ['a', 'b', 'a', 'c', 'b'] | unique | join(',') }}
+batch even: {% for b in [1, 2, 3, 4] | batch(2) %}[{{ b | join(',') }}]{% endfor %}
+batch fill: {% for b in [1, 2, 3, 4] | batch(3, 0) %}[{{ b | join(',') }}]{% endfor %}
+join basic: {{ ['a', 'b', 'c'] | join(', ') }}
+join attr: {{ [{'name': 'A'}, {'name': 'B'}] | join(',', attribute='name') }}
+
+-- mapping --
+keys: {{ ordered | keys | join(',') }}
+values: {{ ordered | values | join(',') }}
+items: {% for k, v in ordered | items %}{{ k }}={{ v }} {% endfor %}
+dictsort: {% for k, v in {'c': 3, 'a': 1, 'b': 2} | dictsort %}{{ k }}={{ v }} {% endfor %}
+attr: {{ ordered | attr('a') }}
+groupby: {% for g in people | groupby('team') %}[{{ g.grouper }}:{{ g.list | length }}]{% endfor %}
+
+-- functional --
+map attribute: {{ people | map(attribute='name') | join(',') }}
+map inline: {{ ['a', 'b'] | map('upper') | join(',') }}
+select truthy: {{ [0, 1, 2, 0, 3] | select | join(',') }}
+select named: {{ [1, 2, 3, 4] | select('gt', 2) | join(',') }}
+reject truthy: {{ [0, 1, 2, 0] | reject | join(',') }}
+reject named: {{ [1, 2, 3, 4] | reject('gt', 2) | join(',') }}
+selectattr: {{ people | selectattr('active') | map(attribute='name') | join(',') }}
+rejectattr: {{ people | rejectattr('active') | map(attribute='name') | join(',') }}
+default undefined: {{ missing | default('fallback') }}
+default alias d: {{ missing | d('fallback2') }}
+default falsy flag: {{ '' | default('non-empty', true) }}
+
+-- serialization --
+tojson scalar: {{ 42 | tojson }}
+tojson string: {{ 'hi' | tojson }}
+tojson bool: {{ true | tojson }}|{{ false | tojson }}
+tojson null: {{ missing | tojson }}
+tojson list: {{ [1, 2, 3] | tojson }}
+tojson map: {{ ordered | tojson }}
+tojson indent: {{ [1, 2] | tojson(indent=2) }}
+
+=== TESTS ===
+
+-- type --
+boolean: {{ true is boolean }}|{{ 42 is boolean }}
+integer: {{ 42 is integer }}|{{ 3.14 is integer }}
+float: {{ 3.14 is float }}|{{ 42 is float }}
+number: {{ 42 is number }}|{{ 'x' is number }}
+string: {{ 'x' is string }}|{{ 42 is string }}
+sequence: {{ [1] is sequence }}|{{ 'hi' is sequence }}
+mapping: {{ ordered is mapping }}|{{ [1] is mapping }}
+iterable: {{ [1] is iterable }}|{{ 'x' is iterable }}|{{ ordered is iterable }}|{{ 42 is iterable }}
+callable: {% macro m() %}{% endmacro %}{{ m is callable }}|{{ 42 is callable }}
+
+-- identity --
+defined: {{ ordered is defined }}|{{ missing is defined }}
+undefined: {{ missing is undefined }}|{{ ordered is undefined }}
+none: {{ nullable is none }}|{{ 'x' is none }}
+sameas: {{ true is sameas(true) }}|{{ true is sameas(false) }}
+true: {{ true is true }}|{{ false is true }}|{{ 1 is true }}
+false: {{ false is false }}|{{ true is false }}|{{ 0 is false }}
+
+-- comparison --
+eq: {{ 1 is eq(1) }}|{{ 1 is eq(2) }}
+equalto alias: {{ 1 is equalto(1) }}
+ne: {{ 1 is ne(2) }}|{{ 1 is ne(1) }}
+lt: {{ 1 is lt(2) }}|{{ 2 is lt(1) }}
+lessthan alias: {{ 1 is lessthan(2) }}
+le: {{ 1 is le(1) }}|{{ 2 is le(1) }}
+gt: {{ 2 is gt(1) }}|{{ 1 is gt(2) }}
+greaterthan alias: {{ 2 is greaterthan(1) }}
+ge: {{ 2 is ge(2) }}|{{ 1 is ge(2) }}
+
+-- numeric parity --
+odd: {{ 3 is odd }}|{{ 4 is odd }}|{{ 'x' is odd }}
+even: {{ 4 is even }}|{{ 3 is even }}|{{ 'x' is even }}
+divisibleby: {{ 9 is divisibleby(3) }}|{{ 7 is divisibleby(3) }}|{{ 9 is divisibleby(0) }}
+
+-- string case --
+lower test: {{ 'hello' is lower }}|{{ 'Hello' is lower }}|{{ 42 is lower }}
+upper test: {{ 'HELLO' is upper }}|{{ 'Hello' is upper }}|{{ 42 is upper }}
+
+=== END ===
