@@ -19,6 +19,7 @@ import io.gravitee.jinja4j.Environment;
 import io.gravitee.jinja4j.SourceLocation;
 import io.gravitee.jinja4j.TemplateException;
 import io.gravitee.jinja4j.value.Value;
+import java.util.Objects;
 
 /**
  * Writes an evaluated {@link Value} into an output buffer, applying the
@@ -27,7 +28,14 @@ import io.gravitee.jinja4j.value.Value;
  * <p>Centralises the rules originally inlined in the interpreter's
  * {@code Output} node branch.</p>
  */
-public record OutputWriter(Environment env) {
+public final class OutputWriter {
+
+  private final Environment env;
+
+  public OutputWriter(Environment env) {
+    this.env = env;
+  }
+
   /**
    * Append a value to {@code sb}.
    *
