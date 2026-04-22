@@ -117,6 +117,7 @@ public final class Interpreter {
         sb,
         loc
       );
+      case CallBlockNode(var call, var body, var loc) -> executeCallBlock(call, body, ctx, sb);
       case Node.Template(var body, _) -> executeBody(body, ctx, sb);
       case GenerationNode(_) -> {
         // No-op marker
@@ -287,6 +288,27 @@ public final class Interpreter {
     var innerSb = new StringBuilder();
     executeBody(body, ctx, innerSb);
     var result = env.applyFilter(filterName, Value.of(innerSb.toString()), evaluator.evalArgs(args, ctx), Map.of(), loc);
+    sb.append(result.asString());
+  }
+
+  /**
+   * Execute {@code {% call expr %} body {% endcall %}}. Pushes a scope
+   * where {@code caller} is bound to a zero-arg callable that renders the
+   * body in that same scope, then evaluates the call expression and
+   * appends the result.
+   */
+  private void executeCallBlock(Expr call, List<Node> body, RenderContext ctx, StringBuilder sb) {
+    var scope = ctx.pushScope();
+    scope.set(
+      "caller",
+      Value.ofCallable("caller", (args, kwargs) -> {
+        var callerSb = new StringBuilder();
+        executeBody(body, scope, callerSb);
+        return Value.of(callerSb.toString());
+      })
+    );
+    var result = evaluator.eval(call, scope);
+    ctx.popScope();
     sb.append(result.asString());
   }
 }
