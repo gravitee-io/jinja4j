@@ -222,4 +222,122 @@ class InterpreterArithmeticTest {
       );
     }
   }
+
+  /**
+   * Each record-pattern {@code instanceof} in {@link io.gravitee.jinja4j.interpreter.eval.Arithmetic}
+   * compiles to multiple JVM branches (left-type + right-type checks).
+   * The tests below explicitly exercise the partial-match paths where only
+   * one side matches the expected type, so those branches are covered and
+   * locked in as regression guards against the dispatch order changing.
+   */
+  @Nested
+  class MixedTypeDispatch {
+
+    // ---- add ----
+
+    @Test
+    void addStringAndNonStringFallsThroughToNumeric() {
+      // left is String, right is not — mismatch on the String+String branch,
+      // then mismatch on the List+List branch, then numeric attempts asDouble
+      // on the string's numeric content.
+      assertThat(env.fromString("{{ '3' + 4 }}").render()).isEqualTo("7.0");
+    }
+
+    @Test
+    void addNonStringAndStringFallsThroughToNumeric() {
+      // right is String, left is not — inverse partial match.
+      assertThat(env.fromString("{{ 4 + '3' }}").render()).isEqualTo("7.0");
+    }
+
+    @Test
+    void addListAndNonListFallsThroughToNumeric() {
+      // left is List, right is not — mismatch on List+List, numeric throws.
+      assertThatThrownBy(() -> env.fromString("{{ a + 1 }}").render(Map.of("a", java.util.List.of(1)))).isInstanceOf(
+        TemplateException.class
+      );
+    }
+
+    @Test
+    void addNonListAndListFallsThroughToNumeric() {
+      // right is List, left is not.
+      assertThatThrownBy(() -> env.fromString("{{ 1 + a }}").render(Map.of("a", java.util.List.of(1)))).isInstanceOf(
+        TemplateException.class
+      );
+    }
+
+    // ---- mul ----
+
+    @Test
+    void mulStringByNonIntFallsThrough() {
+      // left is String, right is a float — mismatch on String*Int, numeric
+      // then coerces string to double.
+      assertThat(env.fromString("{{ '3' * 2.0 }}").render()).isEqualTo("6.0");
+    }
+
+    @Test
+    void mulNonIntByStringFallsThrough() {
+      // left is a float, right is String — inverse partial match.
+      assertThat(env.fromString("{{ 2.0 * '3' }}").render()).isEqualTo("6.0");
+    }
+
+    @Test
+    void mulTwoStringsFallsThrough() {
+      // Neither String*Int pattern matches, numeric parses both strings.
+      assertThat(env.fromString("{{ '3' * '4' }}").render()).isEqualTo("12.0");
+    }
+
+    // ---- floorDiv / mod: hit non-int dispatch arm ----
+
+    @Test
+    void floorDivWithBooleanCoercesToDouble() {
+      // true -> 1.0 via Value.asDouble() — neither side is IntVal so the
+      // int-fast-path is skipped.
+      assertThat(env.fromString("{{ true // true }}").render()).isEqualTo("1");
+    }
+
+    @Test
+    void modWithBooleanCoercesToDouble() {
+      // Same reasoning — exercises the non-int branch of mod().
+      assertThat(env.fromString("{{ true % true }}").render()).isEqualTo("0.0");
+    }
+
+    // ---- pow: hit all three clauses of Int && Int && b >= 0 ----
+
+    @Test
+    void powWithNonIntBaseFallsThrough() {
+      // Left is float, so the first clause (Int) of the guard fails.
+      assertThat(env.fromString("{{ 2.0 ** 3 }}").render()).isEqualTo("8.0");
+    }
+
+    @Test
+    void powWithNonIntExponentFallsThrough() {
+      // Left is int but right is float — second clause fails.
+      assertThat(env.fromString("{{ 2 ** 3.0 }}").render()).isEqualTo("8.0");
+    }
+
+    @Test
+    void powWithNegativeIntExponentFallsThrough() {
+      // Both int but b < 0 — third clause fails, promotes to double.
+      assertThat(env.fromString("{{ 2 ** (-2) }}").render()).isEqualTo("0.25");
+    }
+
+    // ---- numeric dispatcher: sub/add with bool coercion ----
+
+    @Test
+    void subtractBooleansGoesThroughDoubleDispatch() {
+      // Neither side is IntVal/IntVal, so the Long.sum path is skipped;
+      // numeric calls asDouble which converts both booleans to 1.0/0.0.
+      assertThat(env.fromString("{{ true - false }}").render()).isEqualTo("1.0");
+    }
+
+    @Test
+    void numericCatchBranchWrapsRuntimeExceptionAsTemplateException() {
+      // A non-numeric, non-string, non-bool operand in numeric() makes
+      // asDouble() throw IllegalArgumentException, which numeric catches
+      // and rewraps as TemplateException.
+      assertThatThrownBy(() ->
+        env.fromString("{{ a - b }}").render(Map.of("a", java.util.List.of(1), "b", java.util.List.of(2)))
+      ).isInstanceOf(TemplateException.class);
+    }
+  }
 }

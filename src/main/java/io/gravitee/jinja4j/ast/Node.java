@@ -82,6 +82,15 @@ public sealed interface Node {
   /** {% filter name %} ... {% endfilter %} */
   record FilterBlockNode(String filterName, List<Expr> args, List<Node> body, SourceLocation location) implements Node {}
 
+  /**
+   * {% call expr %} ... {% endcall %}
+   *
+   * <p>Invokes {@code expr} (typically a macro call) with a {@code caller}
+   * variable bound to a zero-arg callable that renders the body in the
+   * surrounding scope.</p>
+   */
+  record CallBlockNode(Expr call, List<Node> body, SourceLocation location) implements Node {}
+
   /** {% raw %} ... {% endraw %} */
   record RawNode(String content, SourceLocation location) implements Node {}
 
