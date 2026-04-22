@@ -17,6 +17,7 @@ package io.gravitee.jinja4j.filter.builtin;
 
 import io.gravitee.jinja4j.SourceLocation;
 import io.gravitee.jinja4j.filter.NamedFilter;
+import io.gravitee.jinja4j.interpreter.output.HtmlEscaper;
 import io.gravitee.jinja4j.value.Value;
 import java.util.List;
 import java.util.Map;
@@ -40,13 +41,6 @@ public final class EscapeFilter implements NamedFilter {
 
   @Override
   public Value apply(Value v, List<Value> args, Map<String, Value> kwargs, SourceLocation loc) {
-    var escaped = v
-      .asString()
-      .replace("&", "&amp;")
-      .replace("<", "&lt;")
-      .replace(">", "&gt;")
-      .replace("\"", "&#34;")
-      .replace("'", "&#39;");
-    return new Value.SafeStringVal(escaped);
+    return new Value.SafeStringVal(HtmlEscaper.escape(v.asString()));
   }
 }

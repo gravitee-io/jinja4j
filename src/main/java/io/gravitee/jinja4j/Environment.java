@@ -180,9 +180,9 @@ public final class Environment {
     globals.put(name, Value.ofCallable(name, fn));
   }
 
-  // ---- Internal: filter/test application ----
+  // ---- Internal: filter/test application (exposed for io.gravitee.jinja4j.interpreter.*) ----
 
-  Value applyFilter(String name, Value input, List<Value> args, Map<String, Value> kwargs, SourceLocation loc) {
+  public Value applyFilter(String name, Value input, List<Value> args, Map<String, Value> kwargs, SourceLocation loc) {
     // Check custom filters first
     var custom = customFilters.get(name);
     if (custom.isPresent()) return custom.get().apply(input, args, kwargs, loc);
@@ -193,7 +193,7 @@ public final class Environment {
     throw new TemplateException("Unknown filter '%s'".formatted(name), loc);
   }
 
-  boolean applyTest(String name, Value value, List<Value> args, SourceLocation loc) {
+  public boolean applyTest(String name, Value value, List<Value> args, SourceLocation loc) {
     var custom = customTests.get(name);
     if (custom.isPresent()) return custom.get().test(value, args, loc);
 
@@ -203,9 +203,9 @@ public final class Environment {
     throw new TemplateException("Unknown test '%s'".formatted(name), loc);
   }
 
-  // ---- Internal: template loading ----
+  // ---- Internal: template loading (exposed for io.gravitee.jinja4j.interpreter.*) ----
 
-  String loadTemplate(String name) {
+  public String loadTemplate(String name) {
     for (var loader : loaders) {
       var source = loader.load(name);
       if (source != null) return source;
