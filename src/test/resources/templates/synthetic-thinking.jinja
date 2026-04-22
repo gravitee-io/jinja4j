@@ -1,0 +1,89 @@
+{#- Synthetic thinking/reasoning chat template — exercises advanced Jinja2
+    features (namespace mutation, split/strip chains, reverse iteration, range,
+    dict .get(), type tests) -#}
+
+{%- set ns = namespace(
+    last_user_idx=-1,
+    has_thinking=false,
+    turn_count=messages|length - 1
+) -%}
+
+{#- Pre-scan: find last user message index (reversed iteration) -#}
+{%- for i in range(messages | length) -%}
+    {%- if messages[i]['role'] == 'user' -%}
+        {%- set ns.last_user_idx = i -%}
+    {%- endif -%}
+{%- endfor -%}
+
+{#- Check if thinking is enabled -#}
+{%- if enable_thinking is defined and enable_thinking is not false -%}
+    {%- set ns.has_thinking = true -%}
+{%- endif -%}
+
+{#- Render messages -#}
+{%- for message in messages -%}
+    {%- set role = 'model' if message['role'] == 'assistant' else message['role'] -%}
+
+    {%- if message['role'] == 'system' -%}
+        {{- '<|turn|>' + role + '\n' + message['content'] | trim + '\n<|end_turn|>\n' -}}
+
+    {%- elif message['role'] == 'user' -%}
+        {{- '<|turn|>user\n' + message['content'] + '\n<|end_turn|>\n' -}}
+
+    {%- elif message['role'] == 'assistant' -%}
+        {{- '<|turn|>model\n' -}}
+
+        {#- Extract reasoning via .get() with fallback chain -#}
+        {%- set reasoning = message.get('reasoning') or message.get('reasoning_content') -%}
+        {%- if reasoning and ns.has_thinking -%}
+            {{- '<|think|>\n' + reasoning + '\n<|end_think|>\n' -}}
+        {%- endif -%}
+
+        {#- Handle content with embedded </think> tags -#}
+        {%- if message['content'] is not none -%}
+            {%- set content = message['content'] -%}
+            {%- if '</think>' in content -%}
+                {%- set thinking_part = content.split('</think>')[0].rstrip('\n').lstrip('\n') -%}
+                {%- set content = content.split('</think>')[-1].lstrip('\n') -%}
+                {%- if thinking_part.startswith('<think>') -%}
+                    {%- set thinking_part = thinking_part[7:] -%}
+                {%- endif -%}
+                {%- if ns.has_thinking and thinking_part -%}
+                    {{- '<|think|>\n' + thinking_part.strip() + '\n<|end_think|>\n' -}}
+                {%- endif -%}
+            {%- endif -%}
+            {{- content -}}
+        {%- endif -%}
+
+        {#- Check if next message is a tool response (adjacent item access) -#}
+        {%- if loop.index0 + 1 < messages | length -%}
+            {%- if messages[loop.index0 + 1]['role'] == 'tool' -%}
+                {{- '\n<|awaiting_tool|>' -}}
+            {%- endif -%}
+        {%- endif -%}
+
+        {{- '\n<|end_turn|>\n' -}}
+
+    {%- elif message['role'] == 'tool' -%}
+        {%- set tool_data = message.get('content') -%}
+        {{- '<|turn|>tool\n' -}}
+        {%- if tool_data is sequence and tool_data is not string -%}
+            {%- for item in tool_data -%}
+                {{- item | tojson -}}
+                {%- if not loop.last %}, {% endif -%}
+            {%- endfor -%}
+        {%- elif tool_data is string -%}
+            {{- tool_data -}}
+        {%- else -%}
+            {{- tool_data | tojson -}}
+        {%- endif -%}
+        {{- '\n<|end_turn|>\n' -}}
+    {%- endif -%}
+{%- endfor -%}
+
+{%- if add_generation_prompt is defined and add_generation_prompt -%}
+    {{- '<|turn|>model\n' -}}
+    {%- if ns.has_thinking -%}
+        {{- '<|think|>\n' -}}
+    {%- endif -%}
+{%- endif -%}

@@ -1,0 +1,30 @@
+{#- Synthetic simple chat template -#}
+{%- if not add_generation_prompt is defined -%}
+    {%- set add_generation_prompt = false -%}
+{%- endif -%}
+{%- if messages[0]['role'] == 'system' -%}
+    {%- set system_message = messages[0]['content'] -%}
+    {%- set loop_messages = messages[1:] -%}
+{%- else -%}
+    {%- set loop_messages = messages -%}
+{%- endif -%}
+{{- bos_token -}}
+{%- for message in loop_messages -%}
+    {%- if (message['role'] == 'user') != (loop.index0 % 2 == 0) -%}
+        {{- raise_exception('Roles must alternate user/assistant after optional system message.') -}}
+    {%- endif -%}
+    {%- if message['role'] == 'user' -%}
+        {%- if loop.first and system_message is defined -%}
+            {{- '<|start|>user<|sep|>\n' + system_message.strip().replace('\r\n', '\n') + '\n\n' + message['content'].strip() + '<|end|>\n' -}}
+        {%- else -%}
+            {{- '<|start|>user<|sep|>\n' + message['content'].strip() + '<|end|>\n' -}}
+        {%- endif -%}
+    {%- elif message['role'] == 'assistant' -%}
+        {{- '<|start|>assistant<|sep|>\n' + message['content'] + eos_token + '\n' -}}
+    {%- else -%}
+        {{- raise_exception('Unsupported role: ' + message['role'].title()) -}}
+    {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+    {{- '<|start|>assistant<|sep|>\n' -}}
+{%- endif -%}

@@ -1,0 +1,111 @@
+{#- Synthetic tool-calling chat template — exercises advanced Jinja2 features
+    (macros, recursion, dict iteration, filters, type tests) -#}
+
+{#- Macro: render a JSON-schema type as a TypeScript-like signature -#}
+{%- macro render_type(spec, depth=0) -%}
+    {%- if spec is not defined or spec is none -%}
+        any
+    {%- elif spec is string -%}
+        {{- spec -}}
+    {%- elif spec is mapping -%}
+        {%- if spec.type is defined and spec.type == 'object' and spec.properties is defined -%}
+            { {%- for key, value in spec.properties | dictsort -%}
+                {{- key }}: {{ render_type(value, depth=depth + 1) -}}
+                {%- if not loop.last %}, {% endif -%}
+            {%- endfor -%} }
+        {%- elif spec.type is defined and spec.type == 'array' and spec['items'] is defined -%}
+            {{- render_type(spec['items'], depth=depth + 1) -}}[]
+        {%- elif spec.type is defined -%}
+            {{- spec.type -}}
+        {%- elif spec.enum is defined -%}
+            {{- spec.enum | join(' | ') -}}
+        {%- else -%}
+            any
+        {%- endif -%}
+    {%- elif spec is iterable and spec is not string and spec is not mapping -%}
+        {{- spec | join(' | ') -}}
+    {%- else -%}
+        any
+    {%- endif -%}
+{%- endmacro -%}
+
+{#- Macro: render a single tool declaration -#}
+{%- macro render_tool(tool) -%}
+    <|tool_def|>{{ tool.function.name }}(
+    {%- if tool.function.parameters is defined and tool.function.parameters.properties is defined -%}
+        {%- for pname, pspec in tool.function.parameters.properties | dictsort -%}
+            {{- pname }}: {{ render_type(pspec) -}}
+            {%- if pname not in (tool.function.parameters.required | default([])) %}?{% endif -%}
+            {%- if not loop.last %}, {% endif -%}
+        {%- endfor -%}
+    {%- endif -%}
+    ): {{ tool.function.description | default('No description') | trim }}<|end_tool|>
+{%- endmacro -%}
+
+{%- set ns = namespace(has_system=false, tool_response_pending=false, last_assistant_idx=-1) -%}
+
+{#- Emit date if strftime_now is available -#}
+{%- if strftime_now is defined -%}
+    {{- '<|meta|>date=' + strftime_now('%Y-%m-%d') + '<|end_meta|>\n' -}}
+{%- endif -%}
+
+{#- System message -#}
+{%- if messages[0]['role'] == 'system' -%}
+    {%- set ns.has_system = true -%}
+    {{- '<|system|>\n' + messages[0]['content'] | trim + '\n<|end|>\n' -}}
+{%- endif -%}
+
+{#- Tool definitions -#}
+{%- if tools is defined and tools -%}
+    {{- '<|tools|>\n' -}}
+    {%- for tool in tools -%}
+        {{- render_tool(tool) }}
+    {% endfor -%}
+    {{- '<|end_tools|>\n' -}}
+{%- endif -%}
+
+{#- Messages -#}
+{%- set loop_messages = messages[1:] if ns.has_system else messages -%}
+{%- for message in loop_messages -%}
+    {%- if message['role'] == 'user' -%}
+        {{- '<|user|>\n' + message['content'] + '\n<|end|>\n' -}}
+    {%- elif message['role'] == 'assistant' -%}
+        {{- '<|assistant|>\n' -}}
+        {%- if message['tool_calls'] is defined and message['tool_calls'] -%}
+            {%- for tc in message['tool_calls'] -%}
+                {%- set fn = tc['function'] if tc['function'] is defined else tc -%}
+                {{- '<|tool_call|>' + fn['name'] + '(' -}}
+                {%- if fn['arguments'] is mapping -%}
+                    {{- fn['arguments'] | tojson -}}
+                {%- elif fn['arguments'] is string -%}
+                    {{- fn['arguments'] -}}
+                {%- endif -%}
+                {{- ')<|end_call|>' -}}
+            {%- endfor -%}
+            {{- '\n' -}}
+        {%- endif -%}
+        {%- if message['content'] is defined and message['content'] is not none -%}
+            {{- message['content'] -}}
+        {%- endif -%}
+        {{- '<|end|>\n' -}}
+        {#- Forward-scan for tool responses following this assistant message -#}
+        {%- set ns.tool_response_pending = false -%}
+        {%- for k in range(loop.index0 + 1, loop_messages | length) -%}
+            {%- if loop_messages[k]['role'] == 'tool' and not ns.tool_response_pending -%}
+                {%- set ns.tool_response_pending = true -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- elif message['role'] == 'tool' -%}
+        {%- set tool_name = message['name'] if message['name'] is defined else 'unknown' -%}
+        {{- '<|tool_response|>' + tool_name + ': ' -}}
+        {%- if message['content'] is string -%}
+            {{- message['content'] -}}
+        {%- else -%}
+            {{- message['content'] | tojson(indent=2) -}}
+        {%- endif -%}
+        {{- '<|end_response|>\n' -}}
+    {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt is defined and add_generation_prompt -%}
+    {{- '<|assistant|>\n' -}}
+{%- endif -%}

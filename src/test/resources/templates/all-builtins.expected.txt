@@ -1,0 +1,146 @@
+
+=== FILTERS ===
+
+-- scalar/numeric --
+abs: -7|-3.5
+round default: 4.0
+round precision: 3.14
+round ceil: 4.0
+round floor: 3.0
+int from string: 42
+int default: 99
+float from int: 42.0
+float default: 9.5
+string: 42
+filesizeformat decimal: 1.5 kB
+filesizeformat binary: 1.0 MiB
+sum ints: 6
+sum attribute: 30
+max: 5
+min: 1
+
+-- string --
+upper: HELLO
+lower: hello
+capitalize: Hello world
+title: Hello World Foo
+trim: hello
+replace all: xxbxx
+replace limit: xxbaa
+reverse string: olleh
+truncate: Hello W...
+truncate custom end: Hello Wo>>
+indent default: a
+    b
+    c
+indent width: a
+  b
+  c
+indent first:   a
+  b
+striptags: Hello World
+wordcount: 3
+center: [    hi    ]
+urlencode: a%20b%26c%3Dd
+
+-- escape --
+escape: &lt;b&gt;&#34;x&#34;&lt;/b&gt;
+escape alias e: &lt;br&gt;
+forceescape: &lt;div&gt;
+safe renders raw: <safe/>
+xmlattr: <div class="x" id="y">
+
+-- collection --
+length list: 3
+length string: 5
+length map: 2
+count alias: 4
+first list: 10
+first string: a
+last list: 30
+last string: c
+list from string: a-b-c
+sort ascending: 1,2,3
+sort reverse: 3,2,1
+sort attribute: 1,2,3
+unique: a,b,c
+batch even: [1,2][3,4]
+batch fill: [1,2,3][4,0,0]
+join basic: a, b, c
+join attr: A,B
+
+-- mapping --
+keys: a,b,c
+values: 1,2,3
+items: a=1 b=2 c=3 
+dictsort: a=1 b=2 c=3 
+attr: 1
+groupby: [red:2][blue:1]
+
+-- functional --
+map attribute: Alice,Bob,Carol
+map inline: A,B
+select truthy: 1,2,3
+select named: 3,4
+reject truthy: 0,0
+reject named: 1,2
+selectattr: Alice,Carol
+rejectattr: Bob
+default undefined: fallback
+default alias d: fallback2
+default falsy flag: non-empty
+
+-- serialization --
+tojson scalar: 42
+tojson string: "hi"
+tojson bool: true|false
+tojson null: null
+tojson list: [1, 2, 3]
+tojson map: {"a": 1, "b": 2, "c": 3}
+tojson indent: [
+  1,
+  2
+]
+
+=== TESTS ===
+
+-- type --
+boolean: True|False
+integer: True|False
+float: True|False
+number: True|False
+string: True|False
+sequence: True|False
+mapping: True|False
+iterable: True|True|True|False
+callable: True|False
+
+-- identity --
+defined: True|False
+undefined: True|False
+none: True|False
+sameas: True|False
+true: True|False|False
+false: True|False|False
+
+-- comparison --
+eq: True|False
+equalto alias: True
+ne: True|False
+lt: True|False
+lessthan alias: True
+le: True|False
+gt: True|False
+greaterthan alias: True
+ge: True|False
+
+-- numeric parity --
+odd: True|False|False
+even: True|False|False
+divisibleby: True|False|False
+
+-- string case --
+lower test: True|False|False
+upper test: True|False|False
+
+=== END ===
