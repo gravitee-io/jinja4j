@@ -157,6 +157,19 @@ public final class Interpreter {
 
   private void executeFor(ForNode forNode, RenderContext ctx, StringBuilder sb) {
     var items = ValueAccessor.toIterable(evaluator.eval(forNode.iterable(), ctx), forNode.location());
+    if (forNode.filter() != null) {
+      var filtered = new java.util.ArrayList<Value>(items.size());
+      for (var item : items) {
+        var scope = ctx.pushScope();
+        bindLoopTarget(forNode, item, scope);
+        var keep = evaluator.eval(forNode.filter(), scope).isTruthy();
+        ctx.popScope();
+        if (keep) {
+          filtered.add(item);
+        }
+      }
+      items = filtered;
+    }
     if (items.isEmpty()) {
       executeBody(forNode.elseBranch(), ctx, sb);
       return;
