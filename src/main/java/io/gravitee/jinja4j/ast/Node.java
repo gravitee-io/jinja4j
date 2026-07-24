@@ -42,11 +42,12 @@ public sealed interface Node {
 
   record ConditionBranch(Expr condition, List<Node> body) {}
 
-  /** {% for target in iterable %} ... {% else %} ... {% endfor %} */
+  /** {% for target in iterable if filter %} ... {% else %} ... {% endfor %} */
   record ForNode(
     String target,
     List<String> unpackTargets,
     Expr iterable,
+    Expr filter,
     List<Node> body,
     List<Node> elseBranch,
     boolean recursive,

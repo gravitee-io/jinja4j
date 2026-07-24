@@ -51,6 +51,15 @@ public final class ExpressionParser {
     return parseConditional();
   }
 
+  /**
+   * Parses an expression without consuming an inline ternary {@code if}.
+   * Used where a bare {@code if} has statement-level meaning, e.g. the
+   * iterable and filter condition of {@code {% for x in seq if cond %}}.
+   */
+  public Expr parseExpressionNoCondition() {
+    return parseOr();
+  }
+
   // ---- Precedence levels (loosest to tightest) ----
 
   private Expr parseConditional() {

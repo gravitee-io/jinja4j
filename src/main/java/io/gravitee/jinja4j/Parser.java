@@ -193,7 +193,13 @@ public final class Parser {
     }
 
     cursor.expectKeyword(Token.In.class, "in");
-    var iterable = expressions.parseExpression();
+    var iterable = expressions.parseExpressionNoCondition();
+
+    Expr filter = null;
+    if (cursor.current() instanceof Token.If(var ignoredIf)) {
+      cursor.advance();
+      filter = expressions.parseExpressionNoCondition();
+    }
 
     boolean recursive = false;
     if (cursor.checkIdentifier("recursive")) {
@@ -215,7 +221,7 @@ public final class Parser {
     cursor.expectIdentifier("endfor");
     cursor.expectStmtEnd();
 
-    return new ForNode(target, unpackTargets, iterable, body, elseBranch, recursive, loc);
+    return new ForNode(target, unpackTargets, iterable, filter, body, elseBranch, recursive, loc);
   }
 
   // ---- Set ----
