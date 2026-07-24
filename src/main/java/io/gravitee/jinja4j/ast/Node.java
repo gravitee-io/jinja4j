@@ -56,6 +56,12 @@ public sealed interface Node {
   /** {% set name = value %} */
   record SetNode(String target, Expr value, SourceLocation location) implements Node {}
 
+  /** {% set a, b = value %} — tuple-unpacking assignment */
+  /** {% set name %} ... {% endset %} — block assignment: body renders to a string. */
+  record SetBlockNode(String target, List<Node> body, SourceLocation location) implements Node {}
+
+  record SetUnpackNode(List<String> targets, Expr value, SourceLocation location) implements Node {}
+
   /** {% set ns.attr = value %} — namespace attribute assignment */
   record SetAttrNode(String namespace, String attr, Expr value, SourceLocation location) implements Node {}
 

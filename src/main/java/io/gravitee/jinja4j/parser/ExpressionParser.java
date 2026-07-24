@@ -339,7 +339,7 @@ public final class ExpressionParser {
   private Expr parsePrimary() {
     var tok = cursor.current();
     return switch (tok) {
-      case Token.StringLiteral(String s, SourceLocation loc) -> consumeAs(new Literal(Value.of(s), loc));
+      case Token.StringLiteral(String s, SourceLocation loc) -> parseStringLiteral(s, loc);
       case Token.IntegerLiteral(long i, SourceLocation loc) -> consumeAs(new Literal(Value.of(i), loc));
       case Token.FloatLiteral(double f, SourceLocation loc) -> consumeAs(new Literal(Value.of(f), loc));
       case Token.BooleanLiteral(boolean b, SourceLocation loc) -> consumeAs(new Literal(Value.of(b), loc));
@@ -353,6 +353,24 @@ public final class ExpressionParser {
         tok.location()
       );
     };
+  }
+
+  /**
+   * Consume a string literal, then — matching Python/Jinja2 implicit string
+   * concatenation — keep consuming adjacent string literals ({@code "a" "b"})
+   * and fold them into a single constant.
+   */
+  private Expr parseStringLiteral(String first, SourceLocation loc) {
+    cursor.advance();
+    if (!(cursor.current() instanceof Token.StringLiteral)) {
+      return new Literal(Value.of(first), loc);
+    }
+    var sb = new StringBuilder(first);
+    while (cursor.current() instanceof Token.StringLiteral(String next, SourceLocation ignored)) {
+      sb.append(next);
+      cursor.advance();
+    }
+    return new Literal(Value.of(sb.toString()), loc);
   }
 
   /** Advance past the current token and return {@code expr}. */
