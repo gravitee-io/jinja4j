@@ -29,6 +29,7 @@ public final class Lexer {
 
   private final String source;
   private final String templateName;
+  private final SyntaxConfig config;
   private int pos;
   private int line;
   private int col;
@@ -54,8 +55,13 @@ public final class Lexer {
   );
 
   public Lexer(String source, String templateName) {
+    this(source, templateName, SyntaxConfig.DEFAULT);
+  }
+
+  public Lexer(String source, String templateName, SyntaxConfig config) {
     this.source = source;
     this.templateName = templateName;
+    this.config = config;
     this.pos = 0;
     this.line = 1;
     this.col = 1;
@@ -110,7 +116,11 @@ public final class Lexer {
     var startLoc = loc();
 
     while (pos < source.length()) {
-      if (source.startsWith("{%", pos) || source.startsWith("{{", pos) || source.startsWith("{#", pos)) {
+      if (
+        source.startsWith(config.blockStart(), pos) ||
+        source.startsWith(config.variableStart(), pos) ||
+        source.startsWith(config.commentStart(), pos)
+      ) {
         break;
       }
       sb.append(advance());
@@ -123,17 +133,19 @@ public final class Lexer {
     // Now handle the tag opener if present
     if (pos < source.length()) {
       var tagLoc = loc();
-      if (source.startsWith("{#", pos)) {
-        // Comment — skip until #}
-        match("{#");
+      if (source.startsWith(config.commentStart(), pos)) {
+        // Comment — skip until comment end
+        match(config.commentStart());
         boolean trimLeft = peek() == '-';
         if (trimLeft) advance();
-        // Find closing #}
+        // Find closing delimiter
         while (pos < source.length()) {
-          if ((peek() == '-' && source.startsWith("#}", pos + 1)) || source.startsWith("#}", pos)) {
+          if (
+            (peek() == '-' && source.startsWith(config.commentEnd(), pos + 1)) || source.startsWith(config.commentEnd(), pos)
+          ) {
             boolean trimRight = peek() == '-';
             if (trimRight) advance();
-            match("#}");
+            match(config.commentEnd());
             // Apply whitespace trimming
             if (trimLeft) {
               trimLastTextRight();
@@ -147,8 +159,8 @@ public final class Lexer {
           advance();
         }
         throw new TemplateException("Unclosed comment", tagLoc);
-      } else if (source.startsWith("{{", pos)) {
-        match("{{");
+      } else if (source.startsWith(config.variableStart(), pos)) {
+        match(config.variableStart());
         boolean trimLeft = peek() == '-';
         if (trimLeft) {
           advance();
@@ -157,8 +169,8 @@ public final class Lexer {
         tokens.add(new Token.ExprStart(trimLeft, tagLoc));
         inTag = true;
         currentTagType = TagType.EXPR;
-      } else if (source.startsWith("{%", pos)) {
-        match("{%");
+      } else if (source.startsWith(config.blockStart(), pos)) {
+        match(config.blockStart());
         boolean trimLeft = peek() == '-';
         if (trimLeft) {
           advance();
@@ -203,34 +215,34 @@ public final class Lexer {
 
     // Check for tag close
     if (currentTagType == TagType.EXPR) {
-      if (peek() == '-' && source.startsWith("}}", pos + 1)) {
+      if (peek() == '-' && source.startsWith(config.variableEnd(), pos + 1)) {
         advance(); // skip -
-        match("}}");
+        match(config.variableEnd());
         tokens.add(new Token.ExprEnd(true, loc()));
         inTag = false;
         currentTagType = null;
         trimNextTextLeft = true;
         return;
       }
-      if (source.startsWith("}}", pos)) {
-        match("}}");
+      if (source.startsWith(config.variableEnd(), pos)) {
+        match(config.variableEnd());
         tokens.add(new Token.ExprEnd(false, loc()));
         inTag = false;
         currentTagType = null;
         return;
       }
     } else if (currentTagType == TagType.STMT) {
-      if (peek() == '-' && source.startsWith("%}", pos + 1)) {
+      if (peek() == '-' && source.startsWith(config.blockEnd(), pos + 1)) {
         advance(); // skip -
-        match("%}");
+        match(config.blockEnd());
         tokens.add(new Token.StmtEnd(true, loc()));
         inTag = false;
         currentTagType = null;
         trimNextTextLeft = true;
         return;
       }
-      if (source.startsWith("%}", pos)) {
-        match("%}");
+      if (source.startsWith(config.blockEnd(), pos)) {
+        match(config.blockEnd());
         tokens.add(new Token.StmtEnd(false, loc()));
         inTag = false;
         currentTagType = null;
@@ -366,6 +378,13 @@ public final class Lexer {
     while (pos < source.length() && Character.isDigit(peek())) {
       sb.append(advance());
     }
+    // A number immediately following a '.' is a dotted lookup segment
+    // (e.g. foo.0.1) and must be an integer, not a float — the '.' is the
+    // accessor, not a decimal point.
+    if (!tokens.isEmpty() && tokens.getLast() instanceof Token.Dot) {
+      tokens.add(new Token.IntegerLiteral(Long.parseLong(sb.toString()), loc));
+      return;
+    }
     if (peek() == '.' && Character.isDigit(peek(1))) {
       sb.append(advance()); // .
       while (pos < source.length() && Character.isDigit(peek())) {
@@ -408,27 +427,84 @@ public final class Lexer {
    * closing tags with - (e.g., -%}, -}}).
    */
   public List<Token> tokenizeAndTrim() {
-    var rawTokens = tokenize();
-    var result = new ArrayList<Token>(rawTokens.size());
-    boolean trimLeft = false;
+    var raw = new ArrayList<>(tokenize());
+    if (config.lstripBlocks()) {
+      applyLstripBlocks(raw);
+    }
+    applyRightTrims(raw);
+    if (!config.keepTrailingNewline()) {
+      stripTrailingNewline(raw);
+    }
+    return Collections.unmodifiableList(raw);
+  }
 
-    for (var tok : rawTokens) {
-      if (trimLeft && tok instanceof Token.Text(var val, var loc)) {
-        var trimmed = val.stripLeading();
-        result.add(new Token.Text(trimmed, loc));
-        trimLeft = false;
-      } else {
-        result.add(tok);
-        if (tok instanceof Token.ExprEnd(var tr, _) && tr) {
-          trimLeft = true;
-        } else if (tok instanceof Token.StmtEnd(var tr, _) && tr) {
-          trimLeft = true;
-        } else if (!(tok instanceof Token.Text)) {
-          // Only apply trim to Text tokens immediately following a trim-right closer
-          // Don't reset trimLeft for non-text tokens
+  /**
+   * {@code lstrip_blocks}: strip the inline whitespace that precedes a block tag
+   * when that tag begins a line. Only applies when the tag did not already use a
+   * {@code -} left-trim (which removes all preceding whitespace including newlines).
+   */
+  private void applyLstripBlocks(List<Token> tokens) {
+    for (int i = 1; i < tokens.size(); i++) {
+      if (tokens.get(i) instanceof Token.StmtStart(var trimLeft, _) && !trimLeft) {
+        if (tokens.get(i - 1) instanceof Token.Text(var val, var loc)) {
+          int j = val.length();
+          while (j > 0 && (val.charAt(j - 1) == ' ' || val.charAt(j - 1) == '\t')) j--;
+          if (j == 0 || val.charAt(j - 1) == '\n') {
+            tokens.set(i - 1, new Token.Text(val.substring(0, j), loc));
+          }
         }
       }
     }
-    return Collections.unmodifiableList(result);
+  }
+
+  /**
+   * Apply the right-side trims that affect the text following a tag:
+   * a {@code -} closer strips all leading whitespace from the next text, while
+   * {@code trim_blocks} removes a single newline after a block tag.
+   */
+  private void applyRightTrims(List<Token> tokens) {
+    boolean stripLeadingWs = false;
+    boolean removeOneNewline = false;
+    for (int i = 0; i < tokens.size(); i++) {
+      var tok = tokens.get(i);
+      if ((stripLeadingWs || removeOneNewline) && tok instanceof Token.Text(var val, var loc)) {
+        var s = stripLeadingWs ? val.stripLeading() : removeLeadingNewline(val);
+        tokens.set(i, new Token.Text(s, loc));
+      }
+      if (!(tok instanceof Token.Text)) {
+        stripLeadingWs = false;
+        removeOneNewline = false;
+      }
+      if (tok instanceof Token.ExprEnd(var tr, _)) {
+        stripLeadingWs = tr;
+      } else if (tok instanceof Token.StmtEnd(var tr, _)) {
+        stripLeadingWs = tr;
+        removeOneNewline = !tr && config.trimBlocks();
+      }
+    }
+  }
+
+  private static String removeLeadingNewline(String s) {
+    if (s.startsWith("\r\n")) return s.substring(2);
+    if (s.startsWith("\n")) return s.substring(1);
+    return s;
+  }
+
+  /** {@code keep_trailing_newline=false}: drop a single trailing newline at the end of the template. */
+  private void stripTrailingNewline(List<Token> tokens) {
+    for (int i = tokens.size() - 1; i >= 0; i--) {
+      if (tokens.get(i) instanceof Token.Text(var val, var loc)) {
+        String stripped = val.endsWith("\r\n")
+          ? val.substring(0, val.length() - 2)
+          : val.endsWith("\n")
+            ? val.substring(0, val.length() - 1)
+            : val;
+        tokens.set(i, new Token.Text(stripped, loc));
+        return;
+      }
+      if (!(tokens.get(i) instanceof Token.Eof)) {
+        return; // last content isn't text — nothing to strip
+      }
+    }
   }
 }

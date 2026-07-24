@@ -55,6 +55,7 @@ public final class ExpressionEvaluator {
       case GetAttr(var object, var attribute, var loc) -> ValueAccessor.getAttribute(eval(object, ctx), attribute, loc);
       case GetItem(var object, var key, var loc) -> ValueAccessor.getItem(eval(object, ctx), eval(key, ctx), loc);
       case BinOp(var left, var op, var right, var loc) -> evalBinOp(left, op, right, ctx, loc);
+      case Compare(var operands, var operators, var loc) -> evalCompare(operands, operators, ctx, loc);
       case UnaryOp(var op, var operand, var loc) -> evalUnary(op, operand, ctx, loc);
       case Ternary(var trueExpr, var condition, var falseExpr, _) -> eval(condition, ctx).isTruthy()
         ? eval(trueExpr, ctx)
@@ -118,6 +119,32 @@ public final class ExpressionEvaluator {
       case NOT_IN -> Value.of(!ValueRelations.contains(right, left, loc));
       case CONCAT -> Value.of(left.asString() + right.asString());
       case AND, OR -> throw new IllegalStateException("Short-circuited above");
+    };
+  }
+
+  // ---- Chained comparison ----
+
+  private Value evalCompare(List<Expr> operands, List<Node.BinOperator> operators, RenderContext ctx, SourceLocation loc) {
+    var prev = eval(operands.get(0), ctx);
+    for (int i = 0; i < operators.size(); i++) {
+      var cur = eval(operands.get(i + 1), ctx);
+      if (!compareOp(operators.get(i), prev, cur, loc)) return Value.FALSE;
+      prev = cur;
+    }
+    return Value.TRUE;
+  }
+
+  private static boolean compareOp(Node.BinOperator op, Value left, Value right, SourceLocation loc) {
+    return switch (op) {
+      case EQ -> ValueRelations.equals(left, right);
+      case NE -> !ValueRelations.equals(left, right);
+      case LT -> ValueRelations.compare(left, right, loc) < 0;
+      case GT -> ValueRelations.compare(left, right, loc) > 0;
+      case LE -> ValueRelations.compare(left, right, loc) <= 0;
+      case GE -> ValueRelations.compare(left, right, loc) >= 0;
+      case IN -> ValueRelations.contains(right, left, loc);
+      case NOT_IN -> !ValueRelations.contains(right, left, loc);
+      default -> throw new IllegalStateException("Non-comparison operator in chain: " + op);
     };
   }
 

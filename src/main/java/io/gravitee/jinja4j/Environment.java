@@ -51,6 +51,7 @@ public final class Environment {
   private final Map<String, Node.Template> templateCache = new ConcurrentHashMap<>();
   private boolean autoEscaping = false;
   private boolean undefinedBehaviorStrict = false;
+  private SyntaxConfig syntax = SyntaxConfig.DEFAULT;
 
   public Environment() {
     loaders.add(inlineTemplates);
@@ -93,7 +94,7 @@ public final class Environment {
    * Parse an anonymous template from a string with a name.
    */
   public Template fromString(String source, String name) {
-    var lexer = new Lexer(source, name);
+    var lexer = new Lexer(source, name, syntax);
     var tokens = lexer.tokenizeAndTrim();
     var parser = new Parser(tokens, name);
     var ast = parser.parse();
@@ -116,6 +117,44 @@ public final class Environment {
 
   public void setUndefinedBehaviorStrict(boolean strict) {
     this.undefinedBehaviorStrict = strict;
+  }
+
+  /** The active lexical configuration (delimiters and whitespace policies). */
+  public SyntaxConfig getSyntaxConfig() {
+    return syntax;
+  }
+
+  /** Replace the whole lexical configuration. Clears the template cache. */
+  public void setSyntaxConfig(SyntaxConfig syntax) {
+    this.syntax = syntax;
+    templateCache.clear();
+  }
+
+  /** Remove the first newline after a block tag. */
+  public void setTrimBlocks(boolean trimBlocks) {
+    setSyntaxConfig(syntax.withTrimBlocks(trimBlocks));
+  }
+
+  /** Strip inline whitespace from the start of a line up to a block tag. */
+  public void setLstripBlocks(boolean lstripBlocks) {
+    setSyntaxConfig(syntax.withLstripBlocks(lstripBlocks));
+  }
+
+  /** Keep (or strip) a single trailing newline at the end of a template. */
+  public void setKeepTrailingNewline(boolean keepTrailingNewline) {
+    setSyntaxConfig(syntax.withKeepTrailingNewline(keepTrailingNewline));
+  }
+
+  /** Configure custom tag delimiters. */
+  public void setDelimiters(
+    String blockStart,
+    String blockEnd,
+    String variableStart,
+    String variableEnd,
+    String commentStart,
+    String commentEnd
+  ) {
+    setSyntaxConfig(syntax.withDelimiters(blockStart, blockEnd, variableStart, variableEnd, commentStart, commentEnd));
   }
 
   // ---- Extensibility ----
@@ -222,7 +261,7 @@ public final class Environment {
     if (source == null) {
       throw new TemplateException("Template '%s' not found".formatted(name), SourceLocation.UNKNOWN);
     }
-    var lexer = new Lexer(source, name);
+    var lexer = new Lexer(source, name, syntax);
     var tokens = lexer.tokenizeAndTrim();
     var parser = new Parser(tokens, name);
     return parser.parse();

@@ -51,12 +51,12 @@ public final class ValueRelations {
       return stringContent(left).equals(stringContent(right));
     }
 
-    // Numbers — int/int uses exact equality, mixed uses double
+    // Numbers — int/int uses exact equality, mixed uses lossless comparison
     if (left.isNumber() && right.isNumber()) {
       if (left instanceof Value.IntVal(long a) && right instanceof Value.IntVal(long b)) {
         return a == b;
       }
-      return left.asDouble() == right.asDouble();
+      return compareNumbers(left, right) == 0;
     }
 
     // Collections — deep element-wise
@@ -98,12 +98,38 @@ public final class ValueRelations {
 
   public static int compare(Value left, Value right, SourceLocation loc) {
     if (left.isNumber() && right.isNumber()) {
-      return Double.compare(left.asDouble(), right.asDouble());
+      return compareNumbers(left, right);
     }
     if (left instanceof Value.StringVal(String a) && right instanceof Value.StringVal(String b)) {
       return a.compareTo(b);
     }
     throw new TemplateException("Cannot compare %s and %s".formatted(left, right), loc);
+  }
+
+  /**
+   * Compare two numbers without precision loss. Two integers compare as longs;
+   * a mix of integer and float compares via {@link java.math.BigDecimal} so a
+   * large {@code long} that has no exact {@code double} representation is still
+   * ordered correctly. Non-finite floats fall back to {@link Double#compare}.
+   */
+  private static int compareNumbers(Value left, Value right) {
+    if (left instanceof Value.IntVal(long a) && right instanceof Value.IntVal(long b)) {
+      return Long.compare(a, b);
+    }
+    double dl = left.asDouble();
+    double dr = right.asDouble();
+    if (!Double.isFinite(dl) || !Double.isFinite(dr)) {
+      return Double.compare(dl, dr);
+    }
+    return toBigDecimal(left).compareTo(toBigDecimal(right));
+  }
+
+  private static java.math.BigDecimal toBigDecimal(Value v) {
+    return switch (v) {
+      case Value.IntVal(long n) -> java.math.BigDecimal.valueOf(n);
+      case Value.FloatVal(double d) -> java.math.BigDecimal.valueOf(d);
+      default -> java.math.BigDecimal.valueOf(v.asDouble());
+    };
   }
 
   public static boolean contains(Value container, Value item, SourceLocation loc) {

@@ -121,6 +121,10 @@ public final class Parser {
         case "with" -> parseWith(loc);
         case "filter" -> parseFilterBlock(loc);
         case "raw" -> parseRaw(loc);
+        case "do" -> parseDo(loc);
+        case "autoescape" -> parseAutoescape(loc);
+        case "import" -> parseImport(loc);
+        case "from" -> parseFromImport(loc);
         case "generation" -> parseGeneration(loc);
         default -> throw new TemplateException("Unknown tag '%s'".formatted(name), tok.location());
       };
@@ -240,6 +244,20 @@ public final class Parser {
       return new SetAttrNode(firstName, attrName, value, loc);
     }
 
+    // Tuple-unpacking assignment: set a, b = value
+    if (cursor.check(Token.Comma.class)) {
+      var targets = new ArrayList<String>();
+      targets.add(firstName);
+      while (cursor.check(Token.Comma.class)) {
+        cursor.advance();
+        targets.add(cursor.expectIdentifierName("variable name"));
+      }
+      cursor.expect(Token.Assign.class, "=");
+      var value = expressions.parseExpression();
+      cursor.expectStmtEnd();
+      return new SetUnpackNode(targets, value, loc);
+    }
+
     cursor.expect(Token.Assign.class, "=");
     var value = expressions.parseExpression();
     cursor.expectStmtEnd();
@@ -251,6 +269,13 @@ public final class Parser {
   private Node parseBlock(SourceLocation loc) {
     cursor.advance(); // skip 'block'
     var name = cursor.expectIdentifierName("block name");
+    // Optional 'scoped' and/or 'required' markers (Jinja2 / minijinja).
+    if (cursor.checkIdentifier("scoped")) cursor.advance();
+    boolean required = false;
+    if (cursor.checkIdentifier("required")) {
+      cursor.advance();
+      required = true;
+    }
     cursor.expectStmtEnd();
     var body = parseBody(Set.of("endblock"));
     cursor.expect(Token.StmtStart.class, "{%");
@@ -260,7 +285,7 @@ public final class Parser {
       cursor.advance();
     }
     cursor.expectStmtEnd();
-    return new BlockNode(name, body, loc);
+    return new BlockNode(name, body, required, loc);
   }
 
   // ---- Extends ----
@@ -421,6 +446,58 @@ public final class Parser {
       }
     }
     throw new TemplateException("Unclosed raw block", loc);
+  }
+
+  // ---- Do ----
+
+  private Node parseDo(SourceLocation loc) {
+    cursor.advance(); // skip 'do'
+    var expr = expressions.parseExpression();
+    cursor.expectStmtEnd();
+    return new DoNode(expr, loc);
+  }
+
+  // ---- Autoescape ----
+
+  private Node parseAutoescape(SourceLocation loc) {
+    cursor.advance(); // skip 'autoescape'
+    var flag = expressions.parseExpression();
+    cursor.expectStmtEnd();
+    var body = parseBody(Set.of("endautoescape"));
+    cursor.expect(Token.StmtStart.class, "{%");
+    cursor.expectIdentifier("endautoescape");
+    cursor.expectStmtEnd();
+    return new AutoescapeNode(flag, body, loc);
+  }
+
+  // ---- Import / From ----
+
+  private Node parseImport(SourceLocation loc) {
+    cursor.advance(); // skip 'import'
+    var templateExpr = expressions.parseExpression();
+    cursor.expectIdentifier("as");
+    var target = cursor.expectIdentifierName("import alias");
+    cursor.expectStmtEnd();
+    return new ImportNode(templateExpr, target, loc);
+  }
+
+  private Node parseFromImport(SourceLocation loc) {
+    cursor.advance(); // skip 'from'
+    var templateExpr = expressions.parseExpression();
+    cursor.expectIdentifier("import");
+    var names = new ArrayList<ImportName>();
+    while (!(cursor.current() instanceof Token.StmtEnd)) {
+      if (!names.isEmpty()) cursor.expect(Token.Comma.class, ",");
+      var name = cursor.expectIdentifierName("import name");
+      String alias = null;
+      if (cursor.checkIdentifier("as")) {
+        cursor.advance();
+        alias = cursor.expectIdentifierName("import alias");
+      }
+      names.add(new ImportName(name, alias));
+    }
+    cursor.expectStmtEnd();
+    return new FromImportNode(templateExpr, names, loc);
   }
 
   // ---- Generation ----

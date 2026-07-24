@@ -83,11 +83,16 @@ var toolRenderer = ChatTemplateRenderer.fromRawField(rawJsonField, "tool_use");
 ```
 
 45+ built-in filters including: `abs`, `capitalize`, `default`, `dictsort`,
-`e`/`escape`, `first`, `float`, `int`, `join`, `items`, `keys`, `last`,
+`e`/`escape`, `first`, `float`, `format`, `int`, `join`, `items`, `keys`, `last`,
 `length`, `list`, `lower`, `map`, `max`, `min`, `reject`, `rejectattr`,
 `replace`, `reverse`, `round`, `safe`, `select`, `selectattr`, `sort`,
 `string`, `title`, `tojson`, `trim`, `truncate`, `unique`, `upper`,
 `urlencode`, `values`, and more.
+
+`indent` accepts `width`, `first`, and `blank` keyword arguments; `sort`
+accepts a multi-key `attribute` (e.g. `attribute="last,first"`, dotted paths
+supported) and is stable under `reverse=true`. `format` applies printf-style
+formatting (`"%s has %d" | format(name, count)`).
 
 ### Control Flow
 
@@ -110,6 +115,8 @@ Loop variables: `loop.index`, `loop.index0`, `loop.first`, `loop.last`,
 ```
 {{ 1 + 2 }}              {# arithmetic: + - * / // % **  #}
 {{ a == b }}              {# comparison: == != < > <= >=  #}
+{{ 0 <= x <= 10 }}        {# chained comparisons          #}
+{{ rows.0.1 }}            {# dotted integer lookup        #}
 {{ a and b }}             {# logic: and or not            #}
 {{ "x" in list }}         {# membership: in, not in      #}
 {{ "yes" if ok else "no" }} {# ternary                   #}
@@ -130,15 +137,18 @@ Loop variables: `loop.index`, `loop.index0`, `loop.first`, `loop.last`,
 Built-in tests: `defined`, `undefined`, `none`, `boolean`, `integer`, `float`,
 `number`, `string`, `sequence`, `mapping`, `iterable`, `callable`, `odd`,
 `even`, `divisibleby`, `equalto`/`eq`, `ne`, `lt`/`lessthan`,
-`gt`/`greaterthan`, `le`, `ge`, `sameas`, `in`, `lower`, `upper`, `true`, `false`.
+`gt`/`greaterthan`, `le`, `ge`, `sameas`, `in`, `lower`, `upper`, `true`,
+`false`, `escaped`.
 
 ### Assignment and Scoping
 
 ```
 {% set x = 42 %}
+{% set a, b = pair %}                {# tuple unpacking #}
 {% set ns = namespace(count=0) %}
 {% set ns.count = ns.count + 1 %}
 {% with x = 1, y = 2 %}...{% endwith %}
+{% do ns.items.append(x) %}          {# evaluate, emit nothing #}
 ```
 
 ### Template Reuse
@@ -146,8 +156,11 @@ Built-in tests: `defined`, `undefined`, `none`, `boolean`, `integer`, `float`,
 ```
 {% include "header.html" %}
 {% extends "base.html" %}{% block content %}...{% endblock %}
+{% block body required %}{% endblock %}   {# must be overridden #}
 {% macro greet(name) %}Hello {{ name }}!{% endmacro %}
 {{ greet("World") }}
+{% import "macros.html" as m %}{{ m.greet("World") }}
+{% from "macros.html" import greet as g %}{{ g("World") }}
 ```
 
 ### String Methods
@@ -190,11 +203,22 @@ Supported: `startswith`, `endswith`, `split`, `strip`, `lstrip`, `rstrip`,
 {#- trim comment -#}
 ```
 
+Environment-wide whitespace policies and custom delimiters are also
+configurable:
+
+```java
+env.setTrimBlocks(true);          // drop the first newline after a block tag
+env.setLstripBlocks(true);        // strip leading inline whitespace before block tags
+env.setKeepTrailingNewline(false);// strip a single trailing template newline
+env.setDelimiters("<%", "%>", "<<", ">>", "<#", "#>"); // custom delimiters
+```
+
 ### Special Tags
 
 ```
 {% generation %}   {# MiniJinja marker -- treated as no-op #}
 {% raw %}...{% endraw %}
+{% autoescape true %}{{ html }}{% endautoescape %}   {# scoped auto-escaping #}
 ```
 
 ## Template Loaders

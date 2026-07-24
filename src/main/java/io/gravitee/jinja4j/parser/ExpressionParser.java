@@ -99,26 +99,45 @@ public final class ExpressionParser {
 
   private Expr parseCompare() {
     var left = parseConcatOrAdd();
+
+    // Collect a (possibly chained) comparison: a < b < c. operands has one
+    // more entry than operators; a single comparison degrades to a plain BinOp
+    // to preserve existing evaluation semantics.
+    List<Expr> operands = null;
+    List<Node.BinOperator> operators = null;
+
     while (true) {
       var tok = cursor.current();
-      var comparison = matchComparison(tok);
-      if (comparison != null) {
+      Node.BinOperator op = matchComparison(tok);
+      if (op != null) {
         cursor.advance();
-        left = new BinOp(left, comparison, parseConcatOrAdd(), left.location());
-        continue;
-      }
-      if (tok instanceof Token.Not(var ignored)) {
+      } else if (tok instanceof Token.Not(var ignored)) {
         // 'not in'
         cursor.advance();
         cursor.expectKeyword(Token.In.class, "in");
-        left = new BinOp(left, Node.BinOperator.NOT_IN, parseConcatOrAdd(), left.location());
-        continue;
-      }
-      if (tok instanceof Token.Is(var ignored)) {
+        op = Node.BinOperator.NOT_IN;
+      } else if (tok instanceof Token.Is(var ignored)) {
+        if (operators != null) return new Compare(operands, operators, left.location());
         left = parseIsTest(left);
         continue;
+      } else if (operators != null) {
+        return new Compare(operands, operators, left.location());
+      } else {
+        return left;
       }
-      return left;
+
+      var right = parseConcatOrAdd();
+      if (operators == null) {
+        operators = new ArrayList<>();
+        operands = new ArrayList<>();
+        operands.add(left);
+      }
+      operators.add(op);
+      operands.add(right);
+      if (operators.size() == 1) {
+        // Keep degrading to BinOp until a second comparison appears.
+        left = new BinOp(operands.get(0), op, right, left.location());
+      }
     }
   }
 
@@ -254,6 +273,11 @@ public final class ExpressionParser {
     var tok = cursor.current();
     if (tok instanceof Token.Dot(var ignored)) {
       cursor.advance();
+      // Dotted integer lookup: foo.0 — index into a sequence (Jinja/minijinja).
+      if (cursor.current() instanceof Token.IntegerLiteral(long index, SourceLocation idxLoc)) {
+        cursor.advance();
+        return new GetItem(expr, new Literal(Value.of(index), idxLoc), expr.location());
+      }
       var attrName = cursor.expectIdentifierName("attribute name");
       return new GetAttr(expr, attrName, expr.location());
     }

@@ -19,10 +19,19 @@ import io.gravitee.jinja4j.SourceLocation;
 import io.gravitee.jinja4j.filter.NamedFilter;
 import io.gravitee.jinja4j.value.Value;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-/** Sort a list. Supports {@code reverse=} and {@code attribute=} kwargs. */
+/**
+ * Sort a list. Supports {@code reverse=} and {@code attribute=} kwargs.
+ *
+ * <p>{@code attribute} may name multiple keys separated by commas
+ * ({@code attribute="last,first"}) and each key may be a dotted path
+ * ({@code attribute="user.name"}). The sort is stable; {@code reverse=true}
+ * preserves the stable ordering of equal elements (it sorts ascending and
+ * then reverses).</p>
+ */
 public final class SortFilter implements NamedFilter {
 
   public static final SortFilter INSTANCE = new SortFilter();
@@ -36,27 +45,57 @@ public final class SortFilter implements NamedFilter {
 
   @Override
   public Value apply(Value v, List<Value> args, Map<String, Value> kwargs, SourceLocation loc) {
-    if (v instanceof Value.ListVal lv) {
-      var sorted = new ArrayList<>(lv.items());
-      boolean reverse = kwargs.containsKey("reverse") && kwargs.get("reverse").isTruthy();
-      var attrName = kwargs.containsKey("attribute") ? kwargs.get("attribute").asString() : null;
-      sorted.sort((a, b) -> {
-        Value va = a,
-          vb = b;
-        if (attrName != null) {
-          if (a instanceof Value.MapVal ma) va = ma.entries().getOrDefault(attrName, Value.UNDEFINED);
-          if (b instanceof Value.MapVal mb) vb = mb.entries().getOrDefault(attrName, Value.UNDEFINED);
-        }
-        int cmp;
-        if (va.isNumber() && vb.isNumber()) {
-          cmp = Double.compare(va.asDouble(), vb.asDouble());
-        } else {
-          cmp = va.asString().compareTo(vb.asString());
-        }
-        return reverse ? -cmp : cmp;
-      });
-      return Value.ofList(sorted);
+    if (!(v instanceof Value.ListVal lv)) return v;
+    var sorted = new ArrayList<>(lv.items());
+    boolean reverse = kwargs.containsKey("reverse") && kwargs.get("reverse").isTruthy();
+    boolean caseSensitive = kwargs.containsKey("case_sensitive") && kwargs.get("case_sensitive").isTruthy();
+    var keys = parseAttributes(kwargs.get("attribute"));
+
+    sorted.sort((a, b) -> compareByKeys(a, b, keys, caseSensitive));
+    if (reverse) Collections.reverse(sorted);
+    return Value.ofList(sorted);
+  }
+
+  private static List<List<String>> parseAttributes(Value attribute) {
+    if (attribute == null || attribute.isNull() || attribute.isUndefined()) return List.of();
+    var keys = new ArrayList<List<String>>();
+    for (var part : attribute.asString().split(",")) {
+      var path = new ArrayList<String>();
+      for (var seg : part.strip().split("\\.")) {
+        if (!seg.isEmpty()) path.add(seg);
+      }
+      if (!path.isEmpty()) keys.add(path);
     }
-    return v;
+    return keys;
+  }
+
+  private static int compareByKeys(Value a, Value b, List<List<String>> keys, boolean caseSensitive) {
+    if (keys.isEmpty()) return compareValues(a, b, caseSensitive);
+    for (var key : keys) {
+      int cmp = compareValues(resolve(a, key), resolve(b, key), caseSensitive);
+      if (cmp != 0) return cmp;
+    }
+    return 0;
+  }
+
+  private static Value resolve(Value v, List<String> path) {
+    var current = v;
+    for (var seg : path) {
+      if (current instanceof Value.MapVal mv) {
+        current = mv.entries().getOrDefault(seg, Value.UNDEFINED);
+      } else {
+        return Value.UNDEFINED;
+      }
+    }
+    return current;
+  }
+
+  private static int compareValues(Value va, Value vb, boolean caseSensitive) {
+    if (va.isNumber() && vb.isNumber()) {
+      return Double.compare(va.asDouble(), vb.asDouble());
+    }
+    var sa = va.asString();
+    var sb = vb.asString();
+    return caseSensitive ? sa.compareTo(sb) : sa.compareToIgnoreCase(sb);
   }
 }

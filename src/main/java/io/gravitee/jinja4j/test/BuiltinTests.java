@@ -72,6 +72,7 @@ public final class BuiltinTests {
       .register(TrueTest.INSTANCE)
       .register(FalseTest.INSTANCE)
       .register(LowerTest.INSTANCE)
-      .register(UpperTest.INSTANCE);
+      .register(UpperTest.INSTANCE)
+      .register(EscapedTest.INSTANCE);
   }
 }
