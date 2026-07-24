@@ -65,8 +65,23 @@ public sealed interface Node {
   /** {% set ns.attr = value %} — namespace attribute assignment */
   record SetAttrNode(String namespace, String attr, Expr value, SourceLocation location) implements Node {}
 
-  /** {% block name %} ... {% endblock %} */
-  record BlockNode(String name, List<Node> body, SourceLocation location) implements Node {}
+  /** {% do expression %} — evaluate an expression for its side effects, emit nothing */
+  record DoNode(Expr expression, SourceLocation location) implements Node {}
+
+  /** {% autoescape flag %} ... {% endautoescape %} — scoped auto-escaping override */
+  record AutoescapeNode(Expr flag, List<Node> body, SourceLocation location) implements Node {}
+
+  /** {% import "tpl" as ns %} — import a template's exported names as a namespace */
+  record ImportNode(Expr templateExpr, String target, SourceLocation location) implements Node {}
+
+  /** {% from "tpl" import a, b as c %} — import selected names from a template */
+  record FromImportNode(Expr templateExpr, List<ImportName> names, SourceLocation location) implements Node {}
+
+  /** A single {@code name} or {@code name as alias} entry in a {% from ... import %}. */
+  record ImportName(String name, String alias) {}
+
+  /** {% block name [required] %} ... {% endblock %} */
+  record BlockNode(String name, List<Node> body, boolean required, SourceLocation location) implements Node {}
 
   /** {% extends "base.html" %} */
   record ExtendsNode(Expr templateExpr, SourceLocation location) implements Node {}
@@ -115,6 +130,13 @@ public sealed interface Node {
 
     /** Binary operation */
     record BinOp(Expr left, BinOperator op, Expr right, SourceLocation location) implements Expr {}
+
+    /**
+     * Chained comparison: {@code a < b < c}. {@code operands} has one more
+     * entry than {@code operators}; each operand is evaluated exactly once and
+     * adjacent pairs are compared left-to-right with short-circuiting.
+     */
+    record Compare(List<Expr> operands, List<BinOperator> operators, SourceLocation location) implements Expr {}
 
     /** Unary operation */
     record UnaryOp(UnaryOperator op, Expr operand, SourceLocation location) implements Expr {}

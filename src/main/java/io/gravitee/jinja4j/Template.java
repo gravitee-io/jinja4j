@@ -89,7 +89,7 @@ public final class Template {
 
   private void collectBlocks(Node.Template template, RenderContext ctx) {
     for (var node : template.body()) {
-      if (node instanceof Node.BlockNode(var blockName, var body, _)) {
+      if (node instanceof Node.BlockNode(var blockName, var body, var ignoredRequired, _)) {
         ctx.setBlock(blockName, body);
       }
     }

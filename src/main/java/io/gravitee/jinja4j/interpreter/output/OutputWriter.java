@@ -19,7 +19,8 @@ import io.gravitee.jinja4j.Environment;
 import io.gravitee.jinja4j.SourceLocation;
 import io.gravitee.jinja4j.TemplateException;
 import io.gravitee.jinja4j.value.Value;
-import java.util.Objects;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /**
  * Writes an evaluated {@link Value} into an output buffer, applying the
@@ -32,8 +33,25 @@ public final class OutputWriter {
 
   private final Environment env;
 
+  /** Scoped {@code {% autoescape %}} overrides; the top entry wins over the environment default. */
+  private final Deque<Boolean> autoEscapeOverrides = new ArrayDeque<>();
+
   public OutputWriter(Environment env) {
     this.env = env;
+  }
+
+  /** Push a scoped auto-escaping override (for {@code {% autoescape flag %}}). */
+  public void pushAutoEscape(boolean enabled) {
+    autoEscapeOverrides.push(enabled);
+  }
+
+  /** Pop the most recent auto-escaping override. */
+  public void popAutoEscape() {
+    if (!autoEscapeOverrides.isEmpty()) autoEscapeOverrides.pop();
+  }
+
+  private boolean autoEscaping() {
+    return autoEscapeOverrides.isEmpty() ? env.isAutoEscaping() : autoEscapeOverrides.peek();
   }
 
   /**
@@ -55,7 +73,7 @@ public final class OutputWriter {
       return; // render nothing
     }
     var str = value.asString();
-    if (env.isAutoEscaping() && !(value instanceof Value.SafeStringVal)) {
+    if (autoEscaping() && !(value instanceof Value.SafeStringVal)) {
       str = HtmlEscaper.escape(str);
     }
     sb.append(str);

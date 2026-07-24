@@ -92,6 +92,7 @@ public final class BuiltinFilters {
       .register(GroupbyFilter.INSTANCE)
       .register(SumFilter.INSTANCE)
       .register(CenterFilter.INSTANCE)
-      .register(FilesizeformatFilter.INSTANCE);
+      .register(FilesizeformatFilter.INSTANCE)
+      .register(FormatFilter.INSTANCE);
   }
 }

@@ -72,7 +72,7 @@ public final class Interpreter {
 
   private void executeExtendingTemplate(Node.Template template, RenderContext ctx, StringBuilder sb) {
     for (var node : template.body()) {
-      if (node instanceof BlockNode(var name, var body, _)) {
+      if (node instanceof BlockNode(var name, var body, var ignoredRequired, _)) {
         ctx.setBlock(name, body);
       } else if (node instanceof ExtendsNode) {
         executeNode(node, ctx, sb);
@@ -210,8 +210,18 @@ public final class Interpreter {
 
   // ---- Template inheritance ----
 
-  private void executeBlock(String name, List<Node> body, RenderContext ctx, StringBuilder sb) {
+  private void executeBlock(
+    String name,
+    List<Node> body,
+    boolean required,
+    RenderContext ctx,
+    StringBuilder sb,
+    SourceLocation loc
+  ) {
     var overridden = ctx.getBlock(name);
+    if (required && overridden == null) {
+      throw new TemplateException("Required block '%s' was not overridden".formatted(name), loc);
+    }
     executeBody(overridden != null ? overridden : body, ctx, sb);
   }
 
@@ -235,13 +245,52 @@ public final class Interpreter {
     executeBody(includeAst.body(), ctx, sb);
   }
 
+  // ---- Autoescape ----
+
+  private void executeAutoescape(Expr flag, List<Node> body, RenderContext ctx, StringBuilder sb) {
+    writer.pushAutoEscape(evaluator.eval(flag, ctx).isTruthy());
+    try {
+      executeBody(body, ctx, sb);
+    } finally {
+      writer.popAutoEscape();
+    }
+  }
+
+  // ---- Import / From-import ----
+
+  /**
+   * Render a template's body in an isolated context and capture the names it
+   * defines (macros and top-level {@code set} variables).
+   */
+  private Map<String, Value> collectExports(Expr templateExpr, RenderContext ctx, SourceLocation loc) {
+    var name = evaluator.eval(templateExpr, ctx).asString();
+    var ast = loadTemplateAst(name, loc, false);
+    var importCtx = new RenderContext();
+    importCtx.importAll(env.getGlobals());
+    executeBody(ast.body(), importCtx, new StringBuilder());
+    return importCtx.exportTopScope();
+  }
+
+  private void executeImport(Expr templateExpr, String target, RenderContext ctx, SourceLocation loc) {
+    var exports = collectExports(templateExpr, ctx, loc);
+    ctx.set(target, Value.ofMap(new LinkedHashMap<>(exports)));
+  }
+
+  private void executeFromImport(Expr templateExpr, List<ImportName> names, RenderContext ctx, SourceLocation loc) {
+    var exports = collectExports(templateExpr, ctx, loc);
+    for (var n : names) {
+      var value = exports.getOrDefault(n.name(), Value.UNDEFINED);
+      ctx.set(n.alias() != null ? n.alias() : n.name(), value);
+    }
+  }
+
   private Node.Template loadTemplateAst(String name, SourceLocation loc, boolean ignoreMissing) {
     var source = env.loadTemplate(name);
     if (source == null) {
       if (ignoreMissing) return null;
       throw new TemplateException("Template '%s' not found".formatted(name), loc);
     }
-    var tokens = new Lexer(source, name).tokenizeAndTrim();
+    var tokens = new Lexer(source, name, env.getSyntaxConfig()).tokenizeAndTrim();
     return new Parser(tokens, name).parse();
   }
 

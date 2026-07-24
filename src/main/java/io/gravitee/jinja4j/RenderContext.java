@@ -88,4 +88,13 @@ public final class RenderContext {
   public void importAll(Map<String, Value> vars) {
     scopes.peek().putAll(vars);
   }
+
+  /**
+   * Snapshot the variables defined in the top scope. Used by
+   * {@code {% import %}} / {@code {% from ... import %}} to capture a
+   * template's exported macros and top-level variables.
+   */
+  public Map<String, Value> exportTopScope() {
+    return new LinkedHashMap<>(scopes.peek());
+  }
 }
