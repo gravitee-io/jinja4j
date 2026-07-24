@@ -220,6 +220,16 @@ public final class Parser {
     cursor.advance(); // skip 'set'
     var firstName = cursor.expectIdentifierName("variable name");
 
+    // Block assignment: {% set name %} body {% endset %}
+    if (cursor.check(Token.StmtEnd.class)) {
+      cursor.expectStmtEnd();
+      var body = parseBody(Set.of("endset"));
+      cursor.expect(Token.StmtStart.class, "{%");
+      cursor.expectIdentifier("endset");
+      cursor.expectStmtEnd();
+      return new SetBlockNode(firstName, body, loc);
+    }
+
     // Namespace attribute assignment: set ns.attr = value
     if (cursor.check(Token.Dot.class)) {
       cursor.advance();

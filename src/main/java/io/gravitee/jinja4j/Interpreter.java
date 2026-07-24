@@ -97,8 +97,23 @@ public final class Interpreter {
       case IfNode(var branches, var elseBranch, _) -> executeIf(branches, elseBranch, ctx, sb);
       case ForNode forNode -> executeFor(forNode, ctx, sb);
       case SetNode(var target, var valueExpr, _) -> ctx.set(target, evaluator.eval(valueExpr, ctx));
+      case SetBlockNode(var target, var blockBody, _) -> {
+        var innerSb = new StringBuilder();
+        executeBody(blockBody, ctx, innerSb);
+        ctx.set(target, Value.of(innerSb.toString()));
+      }
+      case SetUnpackNode(var targets, var valueExpr, var loc) -> ValueAccessor.unpackInto(
+        evaluator.eval(valueExpr, ctx),
+        targets,
+        ctx,
+        loc
+      );
       case SetAttrNode(var nsName, var attr, var valueExpr, var loc) -> executeSetAttr(nsName, attr, valueExpr, ctx, loc);
-      case BlockNode(var name, var body, _) -> executeBlock(name, body, ctx, sb);
+      case DoNode(var expr, _) -> evaluator.eval(expr, ctx);
+      case AutoescapeNode(var flag, var body, _) -> executeAutoescape(flag, body, ctx, sb);
+      case ImportNode(var templateExpr, var target, var loc) -> executeImport(templateExpr, target, ctx, loc);
+      case FromImportNode(var templateExpr, var names, var loc) -> executeFromImport(templateExpr, names, ctx, loc);
+      case BlockNode(var name, var body, var required, var loc) -> executeBlock(name, body, required, ctx, sb, loc);
       case ExtendsNode(var templateExpr, var loc) -> executeExtends(templateExpr, ctx, sb, loc);
       case IncludeNode(var templateExpr, var ignoreMissing, var loc) -> executeInclude(
         templateExpr,
