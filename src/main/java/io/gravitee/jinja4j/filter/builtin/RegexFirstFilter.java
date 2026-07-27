@@ -18,6 +18,7 @@ package io.gravitee.jinja4j.filter.builtin;
 import io.gravitee.jinja4j.SourceLocation;
 import io.gravitee.jinja4j.TemplateException;
 import io.gravitee.jinja4j.filter.NamedFilter;
+import io.gravitee.jinja4j.filter.utils.RegexSupport;
 import io.gravitee.jinja4j.value.Value;
 import java.util.List;
 import java.util.Map;
@@ -56,22 +57,5 @@ public final class RegexFirstFilter implements NamedFilter {
     }
     String g = m.group(group);
     return g == null ? Value.NULL : Value.of(g);
-  }
-
-  /** Shared compiled-pattern cache for the regex filters. */
-  static final class RegexSupport {
-
-    private static final java.util.concurrent.ConcurrentHashMap<String, java.util.regex.Pattern> CACHE =
-      new java.util.concurrent.ConcurrentHashMap<>();
-
-    private RegexSupport() {}
-
-    static java.util.regex.Pattern compile(String pattern, SourceLocation loc) {
-      try {
-        return CACHE.computeIfAbsent(pattern, java.util.regex.Pattern::compile);
-      } catch (PatternSyntaxException e) {
-        throw new TemplateException("invalid regex pattern: " + e.getMessage(), loc);
-      }
-    }
   }
 }
