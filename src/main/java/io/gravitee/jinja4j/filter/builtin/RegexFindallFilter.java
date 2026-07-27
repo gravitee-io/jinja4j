@@ -18,7 +18,7 @@ package io.gravitee.jinja4j.filter.builtin;
 import io.gravitee.jinja4j.SourceLocation;
 import io.gravitee.jinja4j.TemplateException;
 import io.gravitee.jinja4j.filter.NamedFilter;
-import io.gravitee.jinja4j.filter.builtin.RegexFirstFilter.RegexSupport;
+import io.gravitee.jinja4j.filter.utils.RegexSupport;
 import io.gravitee.jinja4j.value.Value;
 import java.util.ArrayList;
 import java.util.List;

@@ -36,11 +36,10 @@ public final class RejectattrFilter implements NamedFilter {
 
   @Override
   public Value apply(Value v, List<Value> args, Map<String, Value> kwargs, SourceLocation loc) {
-    if (!(v instanceof Value.ListVal lv) || args.isEmpty()) return v;
+    if (!(v instanceof Value.ListVal(List<Value> items)) || args.isEmpty()) return v;
     var attrName = args.getFirst().asString();
     var testArgs = args.subList(1, args.size());
-    var result = lv
-      .items()
+    var result = items
       .stream()
       .filter(item -> !FilterSupport.applyTestPredicate(FilterSupport.getAttr(item, attrName), testArgs))
       .toList();
