@@ -1,5 +1,9 @@
 # Jinja4j
 
+[![CircleCI](https://circleci.com/gh/gravitee-io/jinja4j.svg?style=svg)](https://circleci.com/gh/gravitee-io/jinja4j)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/gravitee-io/jinja4j/blob/main/LICENSE)
+[![Community Forum](https://img.shields.io/badge/Gravitee.io-Community%20Forum-blue?logo=discourse)](https://community.gravitee.io)
+
 A lightweight, zero-dependency Jinja2-compatible template engine for Java,
 inspired by [MiniJinja](https://github.com/mitsuhiko/minijinja).
 
