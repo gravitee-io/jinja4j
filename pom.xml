@@ -28,7 +28,7 @@
 
     <groupId>io.gravitee.jinja4j</groupId>
     <artifactId>jinja4j</artifactId>
-    <version>1.0.0-alpha.2</version>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
 
     <name>Gravitee.io - Jinja4j</name>
